@@ -1,5 +1,6 @@
 # all elements used in the graphical interface, imports of PySide6 elements
 from PySide6.QtWidgets import (
+    QComboBox,
     QDialog,
     QDoubleSpinBox,
     QFormLayout,
@@ -9,6 +10,9 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
+    QSpinBox,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QTextBrowser,
@@ -61,7 +65,17 @@ class MainWindow(QMainWindow):
         title = QLabel("Parameters")
         title.setStyleSheet("font-size: 18px; font-weight: bold;")
 
-        form_layout = QFormLayout()
+        self.measurement_mode_input = QComboBox()
+        self.measurement_mode_input.addItems([
+            "One stitch and one row",
+            "Sample width and height",
+        ])
+
+        self.parameter_pages = QStackedWidget()
+        self.parameter_pages.setSizePolicy(
+            QSizePolicy.Preferred,
+            QSizePolicy.Maximum,
+        )
 
         self.stitch_width_input = QDoubleSpinBox()
         self.stitch_width_input.setRange(0.01, 10.00)
@@ -75,8 +89,43 @@ class MainWindow(QMainWindow):
         self.row_height_input.setValue(0.73)
         self.row_height_input.setSuffix(" cm")
 
-        form_layout.addRow("Stitch width:", self.stitch_width_input)
-        form_layout.addRow("Row height:", self.row_height_input)
+        direct_parameters = QWidget()
+        direct_form_layout = QFormLayout(direct_parameters)
+        direct_form_layout.addRow("Stitch width:", self.stitch_width_input)
+        direct_form_layout.addRow("Row height:", self.row_height_input)
+
+        self.sample_width_input = QDoubleSpinBox()
+        self.sample_width_input.setRange(0.01, 1000.00)
+        self.sample_width_input.setSingleStep(0.10)
+        self.sample_width_input.setValue(7.50)
+        self.sample_width_input.setSuffix(" cm")
+
+        self.sample_height_input = QDoubleSpinBox()
+        self.sample_height_input.setRange(0.01, 1000.00)
+        self.sample_height_input.setSingleStep(0.10)
+        self.sample_height_input.setValue(2.92)
+        self.sample_height_input.setSuffix(" cm")
+
+        self.sample_stitches_input = QSpinBox()
+        self.sample_stitches_input.setRange(1, 10000)
+        self.sample_stitches_input.setValue(10)
+
+        self.sample_rows_input = QSpinBox()
+        self.sample_rows_input.setRange(1, 10000)
+        self.sample_rows_input.setValue(4)
+
+        sample_parameters = QWidget()
+        sample_form_layout = QFormLayout(sample_parameters)
+        sample_form_layout.addRow("Row length:", self.sample_width_input)
+        sample_form_layout.addRow("Stitches in row:", self.sample_stitches_input)
+        sample_form_layout.addRow("Sample height:", self.sample_height_input)
+        sample_form_layout.addRow("Rows in sample:", self.sample_rows_input)
+
+        self.parameter_pages.addWidget(direct_parameters)
+        self.parameter_pages.addWidget(sample_parameters)
+        self.measurement_mode_input.currentIndexChanged.connect(
+            self.parameter_pages.setCurrentIndex
+        )
 
         self.rows_table = QTableWidget()
         self.rows_table.setColumnCount(2)
@@ -86,20 +135,41 @@ class MainWindow(QMainWindow):
         self.add_row_button = QPushButton("Add row")
         self.delete_row_button = QPushButton("Delete selected row")
         self.build_button = QPushButton("Build 3D model")
+        self.build_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2563eb;
+                color: white;
+                font-size: 15px;
+                font-weight: bold;
+                padding: 10px;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #1d4ed8;
+            }
+            QPushButton:pressed {
+                background-color: #1e40af;
+            }
+        """)
+        self.pattern_button = QPushButton("Show row scheme")
         self.instructions_button = QPushButton("Instructions")
 
         self.add_row_button.clicked.connect(self.add_row)
         self.delete_row_button.clicked.connect(self.delete_selected_row)
         self.build_button.clicked.connect(self.build_model)
+        self.pattern_button.clicked.connect(self.show_row_scheme)
         self.instructions_button.clicked.connect(self.show_instructions)
 
         layout.addWidget(self.instructions_button)
         layout.addWidget(title)
-        layout.addLayout(form_layout)
+        layout.addWidget(QLabel("Parameter input:"))
+        layout.addWidget(self.measurement_mode_input)
+        layout.addWidget(self.parameter_pages)
         layout.addWidget(QLabel("Rows:"))
         layout.addWidget(self.rows_table)
         layout.addWidget(self.add_row_button)
         layout.addWidget(self.delete_row_button)
+        layout.addWidget(self.pattern_button)
         layout.addWidget(self.build_button)
 
         return panel
@@ -126,13 +196,19 @@ class MainWindow(QMainWindow):
     # The method adds a predefined set of rows to the table
     # These rows are used as an example so that, when the application starts, the user immediately sees a generated 3D model
     def add_default_rows(self):
-        default_stitches = [
-            6, 12, 18, 24, 30, 36, 42, 48,
-            48, 48, 48, 48, 48, 48, 48,
-            42, 36, 30, 24, 18, 18, 24,
-            30, 36, 42, 48, 48, 48, 48,
-            48, 48, 48, 42, 36, 30, 24, 18, 12, 6,
-        ]
+        # default_stitches = [6, 12, 18, 24, 30, 36, 42, 48, 48, 48, 48, 48, 48, 48, 48, 42, 36, 30, 24, 18, 18, 24, 30, 36, 42, 48, 48, 48, 48, 48, 48, 48, 42, 36, 30, 24, 18, 12, 6,]
+        # 1 and 2
+        # default_stitches = [6, 12, 18, 24, 24, 24, 24, 24, 24, 18, 12, 6]
+
+        # 3
+        # default_stitches = [6, 12, 18, 24, 30, 36, 42, 48, 48, 48, 48, 48, 48, 48, 48, 42, 36, 30, 24, 18, 12, 6]
+        
+        # 4
+        # default_stitches = [6, 12, 18, 24, 30, 36, 42, 48, 48, 48, 48, 48, 48, 48, 48, 42, 36, 30, 24, 18, 18, 24, 30, 36, 42, 48, 48, 48, 48, 48, 48, 48, 48, 42, 36, 30, 24, 18, 12, 6]
+        
+        # 5
+        default_stitches = [6, 12, 18, 24, 30, 36, 42, 48, 48, 48, 48, 42, 36, 36, 42, 48, 48, 48, 48, 42, 36, 30, 24, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 12, 6]
+        
 
         for stitches in default_stitches:
             self.add_row(stitches)
@@ -189,6 +265,26 @@ class MainWindow(QMainWindow):
                 if stitches <= 0:
                     raise ValueError
 
+                if stitches_per_row:
+                    previous_stitches = stitches_per_row[-1]
+                    min_stitches = previous_stitches / 2
+                    max_stitches = previous_stitches * 2
+
+                    if (
+                        stitches < min_stitches
+                        or stitches > max_stitches
+                    ):
+                        QMessageBox.warning(
+                            self,
+                            "Input error",
+                            (
+                                f"Row {row_index + 1} must contain from "
+                                f"{min_stitches:g} to {max_stitches:g} "
+                                f"stitches."
+                            ),
+                        )
+                        return []
+
                 stitches_per_row.append(stitches)
 
             except ValueError:
@@ -216,8 +312,7 @@ class MainWindow(QMainWindow):
             )
             return
 
-        stitch_width = self.stitch_width_input.value()
-        row_height = self.row_height_input.value()
+        stitch_width, row_height = self.get_size_parameters()
 
         calculator = CrochetSurfaceCalculator(
             stitches_per_row=stitches_per_row,
@@ -236,6 +331,135 @@ class MainWindow(QMainWindow):
             return
 
         self.viewer.display(mesh)
+
+    # Method for showing a row-by-row crochet scheme based on the current table data
+    # It displays a text instruction for each row.
+    def show_row_scheme(self):
+        stitches_per_row = self.get_rows_data()
+
+        if not stitches_per_row:
+            QMessageBox.warning(
+                self,
+                "Input error",
+                "Add at least one valid row to create a row scheme.",
+            )
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Row scheme")
+        dialog.setMinimumSize(420, 520)
+
+        layout = QVBoxLayout(dialog)
+
+        title = QLabel("Row scheme")
+        title.setStyleSheet("font-size: 18px; font-weight: bold;")
+
+        scheme_table = QTableWidget()
+        scheme_table.setColumnCount(2)
+        scheme_table.setHorizontalHeaderLabels([
+            "Row",
+            "Pattern",
+        ])
+        scheme_table.setRowCount(len(stitches_per_row))
+
+        for row_index, stitches in enumerate(stitches_per_row):
+            scheme_table.setItem(
+                row_index,
+                0,
+                QTableWidgetItem(str(row_index + 1)),
+            )
+            scheme_table.setItem(
+                row_index,
+                1,
+                QTableWidgetItem(
+                    self.row_scheme_text(stitches_per_row, row_index),
+                ),
+            )
+
+        scheme_table.resizeColumnsToContents()
+
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(dialog.accept)
+
+        layout.addWidget(title)
+        layout.addWidget(scheme_table)
+        layout.addWidget(close_button)
+
+        dialog.exec()
+
+    # Method for creating a text instruction for one crochet row
+    def row_scheme_text(self, stitches_per_row, row_index):
+        current_stitches = stitches_per_row[row_index]
+
+        if row_index == 0:
+            return f"Work {current_stitches} stitches."
+
+        previous_stitches = stitches_per_row[row_index - 1]
+        stitch_difference = current_stitches - previous_stitches
+
+        if stitch_difference == 0:
+            return f"Work {current_stitches} stitches without changes."
+
+        if stitch_difference > 0:
+            increase_count = stitch_difference
+            simple_stitches = current_stitches / increase_count - 2
+
+            if simple_stitches == 0:
+                return (
+                    f"Work 1 increase. Repeat {increase_count} times. "
+                    f"Total: {current_stitches} stitches."
+                )
+
+            return (
+                f"Work {self.format_scheme_number(simple_stitches)} "
+                "single crochet, then 1 increase. "
+                f"Repeat {increase_count} times. "
+                f"Total: {current_stitches} stitches."
+            )
+
+        decrease_count = abs(stitch_difference)
+        simple_stitches = previous_stitches / decrease_count - 2
+
+        if simple_stitches == 0:
+            return (
+                f"Work 1 decrease. Repeat {decrease_count} times. "
+                f"Total: {current_stitches} stitches."
+            )
+
+        return (
+            f"Work {self.format_scheme_number(simple_stitches)} "
+            "single crochet, then 1 decrease. "
+            f"Repeat {decrease_count} times. "
+            f"Total: {current_stitches} stitches."
+        )
+
+    # Method for showing whole numbers without a decimal point in row scheme text
+    @staticmethod
+    def format_scheme_number(value):
+        if float(value).is_integer():
+            return str(int(value))
+
+        return f"{value:g}"
+
+    # Method for getting the stitch width and row height from the active parameter input mode
+    # In sample mode, the app calculates the size of one stitch and one row from the measured sample.
+    def get_size_parameters(self):
+        if self.measurement_mode_input.currentIndex() == 1:
+            stitch_width = (
+                self.sample_width_input.value()
+                / self.sample_stitches_input.value()
+            )
+            row_height = (
+                self.sample_height_input.value()
+                / self.sample_rows_input.value()
+            )
+
+            return stitch_width, row_height
+
+        return (
+            self.stitch_width_input.value(),
+            self.row_height_input.value(),
+        )
 
     # Method for showing instructions about using the application
     # The instructions explain what the parameters mean, how to fill the rows table, and what the main buttons are for
@@ -259,9 +483,9 @@ class MainWindow(QMainWindow):
                 <li>First, take the yarn and hook that you are going to use to crochet the item.</li>
                 <li>Crochet a small sample using this yarn and hook. It is recommended to make a sample of 10 stitches and 4 rows.</li>
                 <Li>After you have crocheted this sample, measure its width and height with a ruler.</Li>
-                <Li>To calculate the stitch width, take the width of the sample, meaning the length of the row, and divide the measured value by the number of stitches in the row. For example, divide it by 10, and you will get the width of one stitch.</Li>
-                <Li>Do the same with the height of the sample and the row height. Measure the height of the sample and divide it by the number of rows. For example, divide it by 4, and you will get the height of one row.</Li>
-                <Li>Enter the obtained values into the parameter fields at the top left part of the application window.</Li>
+                <Li>You can enter the stitch width and row height directly, or switch the parameter input mode to sample width and height.</Li>
+                <Li>In sample mode, enter the measured row length, sample height, stitches in the measured row, and rows in the sample. The app will calculate the width of one stitch and the height of one row automatically.</Li>
+                <Li>The default sample values use 10 stitches in one row and 4 rows in height, but you can change both numbers.</Li>
             </ul>
 
             <h3>How to use the table?</h3>
